@@ -21,7 +21,10 @@ struct Pago {
 void crearArchivoSiNoExiste(const char* nombreArchivo);
 void mostrarMenu();
 const char* nombreCategoria(int categoria);
+bool buscarSocioPUP(FILE* archivo, int idSocio, Socio& socio);
 void altaSocio();
+void modificarSocio();
+void bajaSocio();
 void listarPadron();
 
 int main() {
@@ -42,8 +45,8 @@ int main() {
 
         switch (opcion) {
             case 1: altaSocio(); break;
-            case 2: cout << "Todavia no implementado" << endl; break;
-            case 3: cout << "Todavia no implementado" << endl; break;
+            case 2: modificarSocio(); break;
+            case 3: bajaSocio(); break;
             case 4: listarPadron(); break;
             case 5: cout << "Todavia no implementado" << endl; break;
             case 6: cout << "Todavia no implementado" << endl; break;
@@ -78,6 +81,16 @@ const char* nombreCategoria(int categoria) {
     if (categoria == 2) return "Activo";
     if (categoria == 3) return "Vitalicio";
     return "?";
+}
+
+// PUP (Posicion Unica Predecible): el socio numero N esta siempre en la posicion N-1,
+// porque el alta va al final, no hay huecos y la baja nunca borra. Un solo acceso al disco.
+bool buscarSocioPUP(FILE* archivo, int idSocio, Socio& socio) {
+    if (idSocio < 1) return false;
+
+    fseek(archivo, (long)(idSocio - 1) * (long)sizeof(Socio), SEEK_SET);
+    // si el numero es mayor al ultimo socio, fread no devuelve 1
+    return fread(&socio, sizeof(Socio), 1, archivo) == 1;
 }
 
 void altaSocio() {
@@ -122,6 +135,94 @@ void altaSocio() {
     }
 
     cout << "Socio dado de alta con el numero " << socio.idSocio << endl;
+}
+
+void modificarSocio() {
+    FILE* archivo = fopen("socios.dat", "rb+");
+
+    if (archivo == NULL) {
+        cout << "No se pudo abrir socios.dat" << endl;
+        return;
+    }
+
+    int id;
+    Socio socio;
+
+    cout << "Numero de socio: ";
+    cin >> id;
+
+    if (!buscarSocioPUP(archivo, id, socio)) {
+        cout << "El socio " << id << " no existe" << endl;
+        fclose(archivo);
+        return;
+    }
+
+    if (!socio.activo) {
+        cout << socio.nombre << " esta dado de baja, no se puede modificar" << endl;
+        fclose(archivo);
+        return;
+    }
+
+    cout << "Socio: " << socio.nombre << " | categoria actual: "
+         << nombreCategoria(socio.categoria) << " | cuota actual: $" << socio.cuotaMensual << endl;
+    cout << "Nueva categoria (1 Infantil, 2 Activo, 3 Vitalicio): ";
+    cin >> socio.categoria;
+    cout << "Nueva cuota mensual: ";
+    cin >> socio.cuotaMensual;
+
+    // APUNTAR (hecho en buscarSocioPUP), LEER, MODIFICAR, APUNTAR de nuevo y GRABAR:
+    // la lectura me corrio el puntero, por eso vuelvo a posicionarme en el mismo socio.
+    fseek(archivo, (long)(id - 1) * (long)sizeof(Socio), SEEK_SET);
+    fwrite(&socio, sizeof(Socio), 1, archivo);
+    fclose(archivo);
+
+    cout << "Socio modificado" << endl;
+}
+
+void bajaSocio() {
+    FILE* archivo = fopen("socios.dat", "rb+");
+
+    if (archivo == NULL) {
+        cout << "No se pudo abrir socios.dat" << endl;
+        return;
+    }
+
+    int id;
+    Socio socio;
+
+    cout << "Numero de socio: ";
+    cin >> id;
+
+    if (!buscarSocioPUP(archivo, id, socio)) {
+        cout << "El socio " << id << " no existe" << endl;
+        fclose(archivo);
+        return;
+    }
+
+    if (!socio.activo) {
+        cout << socio.nombre << " ya estaba dado de baja" << endl;
+        fclose(archivo);
+        return;
+    }
+
+    char confirmacion;
+    cout << "Confirma la baja de " << socio.nombre << "? (s/n): ";
+    cin >> confirmacion;
+
+    if (confirmacion != 's' && confirmacion != 'S') {
+        cout << "Baja cancelada" << endl;
+        fclose(archivo);
+        return;
+    }
+
+    // No borro el registro: solo lo marco. Si lo borrara, se correrian los numeros
+    // de los demas socios y el PUP dejaria de funcionar.
+    socio.activo = false;
+    fseek(archivo, (long)(id - 1) * (long)sizeof(Socio), SEEK_SET);
+    fwrite(&socio, sizeof(Socio), 1, archivo);
+    fclose(archivo);
+
+    cout << socio.nombre << " quedo dado de baja" << endl;
 }
 
 void listarPadron() {
