@@ -1,0 +1,14 @@
+# Ejecutables y objetos
+*.exe
+*.out
+*.o
+*.obj
+club
+build/
+
+# Archivos de datos (se generan al correr el programa)
+*.dat
+
+# Carpetas de editores
+.vscode/
+.idea/
