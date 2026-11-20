@@ -26,6 +26,8 @@ void altaSocio();
 void modificarSocio();
 void bajaSocio();
 void listarPadron();
+void registrarPago();
+bool insertarPago(Pago nuevo);
 
 int main() {
     // Si los archivos no existen los creo vacios: "ab" crea y no borra nada.
@@ -48,7 +50,7 @@ int main() {
             case 2: modificarSocio(); break;
             case 3: bajaSocio(); break;
             case 4: listarPadron(); break;
-            case 5: cout << "Todavia no implementado" << endl; break;
+            case 5: registrarPago(); break;
             case 6: cout << "Todavia no implementado" << endl; break;
             case 0: cout << "Hasta luego" << endl; break;
             default: cout << "Opcion invalida" << endl;
@@ -256,4 +258,93 @@ void listarPadron() {
 
     if (activos == 0) cout << "No hay socios activos" << endl;
     else cout << "Total de socios activos: " << activos << endl;
+}
+
+void registrarPago() {
+    FILE* archivo = fopen("socios.dat", "rb");
+
+    if (archivo == NULL) {
+        cout << "No se pudo abrir socios.dat" << endl;
+        return;
+    }
+
+    int id;
+    Socio socio;
+
+    cout << "Numero de socio: ";
+    cin >> id;
+
+    // Valido al socio por PUP: si no existe o esta dado de baja no se le puede cobrar.
+    bool existe = buscarSocioPUP(archivo, id, socio);
+    fclose(archivo);
+
+    if (!existe) {
+        cout << "El socio " << id << " no existe. No se puede cobrar" << endl;
+        return;
+    }
+
+    if (!socio.activo) {
+        cout << socio.nombre << " esta dado de baja. No se puede cobrar" << endl;
+        return;
+    }
+
+    Pago pago;
+    memset(&pago, 0, sizeof(Pago));
+    pago.idSocio = id;
+
+    cout << "Mes que paga (MM-AAAA): ";
+    cin.ignore(10000, '\n');
+    cin.getline(pago.mes, 8);
+    cout << "Monto (0 = cuota justa de $" << socio.cuotaMensual << "): ";
+    cin >> pago.monto;
+
+    if (pago.monto == 0) pago.monto = socio.cuotaMensual;
+
+    if (insertarPago(pago)) {
+        cout << "Pago registrado: " << socio.nombre << " | " << pago.mes
+             << " | $" << pago.monto << endl;
+    }
+}
+
+// Inserta el pago en su lugar para que pagos.dat siga ordenado por idSocio.
+// Copio todo a un archivo auxiliar en una sola pasada, y apenas aparece un pago de
+// un socio MAYOR al nuevo, escribo el nuevo antes. Si no aparece ninguno, va al final.
+// Con ">" (y no ">=") el pago nuevo queda despues de los que ya tenia ese socio.
+bool insertarPago(Pago nuevo) {
+    FILE* original = fopen("pagos.dat", "rb");
+    FILE* auxiliar = fopen("pagos_aux.dat", "wb");
+
+    if (original == NULL || auxiliar == NULL) {
+        cout << "No se pudo abrir pagos.dat o el archivo auxiliar" << endl;
+        if (original != NULL) fclose(original);
+        if (auxiliar != NULL) fclose(auxiliar);
+        return false;
+    }
+
+    Pago pago;
+    bool insertado = false;
+    int leido = fread(&pago, sizeof(Pago), 1, original);
+
+    while (leido == 1) {
+        if (!insertado && pago.idSocio > nuevo.idSocio) {
+            fwrite(&nuevo, sizeof(Pago), 1, auxiliar);
+            insertado = true;
+        }
+        fwrite(&pago, sizeof(Pago), 1, auxiliar);
+        leido = fread(&pago, sizeof(Pago), 1, original);
+    }
+
+    if (!insertado) fwrite(&nuevo, sizeof(Pago), 1, auxiliar);
+
+    fclose(original);
+    fclose(auxiliar);
+
+    // Recien ahora reemplazo el original: si algo fallaba antes, pagos.dat quedaba intacto.
+    remove("pagos.dat");
+    if (rename("pagos_aux.dat", "pagos.dat") != 0) {
+        cout << "No se pudo reemplazar pagos.dat. Los datos quedaron en pagos_aux.dat" << endl;
+        return false;
+    }
+
+    return true;
 }
